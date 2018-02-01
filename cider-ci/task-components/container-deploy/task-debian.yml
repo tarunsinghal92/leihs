@@ -23,3 +23,29 @@ scripts:
       lxc file push \
         ${CIDER_CI_WORKING_DIR}/deploy/container-test/debian-apt-sources.txt \
         ${CONTAINER_NAME}/etc/apt/sources.list
+
+  destroy-container:
+    body: 'touch _cider-ci_keep'
+
+  cache-container:
+    exclusive_executor_resource: 'lxc_image_caching_{{LXC_IMAGE_CACHE_NAME}}_{{LXC_CACHED_BASE_IMAGE}}'
+    start_when:
+      test is ok:
+        script_key: test
+        states: [passed]
+    ignore_abort: yes
+    timeout: 1 Hour
+    body: |
+      #!/usr/bin/env bash
+      set -eux
+      source deploy/container-test/bin/shared-container-cache.sh
+
+      lxc info "$CONTAINER_NAME"
+
+      # cleanup before caching:
+      lxc exec "$CONTAINER_NAME" -- /bin/bash -c '\
+        systemctl stop leihs* && dropdb leihs && systemctl stop postgresql && rm -rf /tmp/leihs /leihs'
+
+      save_container_to_image_cache
+      lxc image info "$CACHED_IMAGE_NAME" || true
+      remove_cached_image_from_lxd || true
